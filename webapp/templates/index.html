@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OM²AHL-BiG — Intra-frame Video Forgery Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #06080f;
+    --bg-card: #0c0f1a;
+    --bg-card2: #111525;
+    --border: rgba(99,178,255,0.12);
+    --border-hot: rgba(99,178,255,0.35);
+    --accent: #3B9EFF;
+    --accent-dim: rgba(59,158,255,0.15);
+    --red: #FF4B4B;
+    --red-dim: rgba(255,75,75,0.12);
+    --green: #22C97C;
+    --green-dim: rgba(34,201,124,0.12);
+    --amber: #F59E0B;
+    --text: #E8EDF8;
+    --text-dim: #7A879F;
+    --text-muted: #4A5568;
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'Space Grotesk', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --radius: 12px;
+    --radius-lg: 18px;
+    --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+    min-height: 100vh; overflow-x: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59,158,255,0.12), transparent),
+      radial-gradient(ellipse 40% 40% at 100% 100%, rgba(106,76,147,0.08), transparent);
+  }
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 2rem; height: 64px;
+    background: rgba(6,8,15,0.85); backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-logo {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-display); font-size: 1.25rem; font-weight: 800;
+    color: var(--text); text-decoration: none;
+  }
+  .nav-logo-mark {
+    width: 32px; height: 32px; background: var(--accent); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800; color: #fff;
+  }
+  .nav-badge {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+    background: var(--accent-dim); color: var(--accent);
+    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-hot);
+  }
+  .nav-links {
+    display: flex; gap: 6px; background: var(--bg-card);
+    padding: 4px; border-radius: 999px; border: 1px solid var(--border);
+  }
+  .nav-link {
+    border: none; background: transparent; color: var(--text-dim);
+    font-family: var(--font-body); font-size: 13px; font-weight: 500;
+    padding: 8px 14px; border-radius: 999px; cursor: pointer; transition: var(--transition);
+  }
+  .nav-link:hover { color: var(--text); }
+  .nav-link.active { background: var(--accent); color: #fff; }
+  .nav-status {
+    font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 6px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+  main { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+  .page { display: none; animation: fadeIn 0.35s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent-dim); color: var(--accent);
+    border: 1px solid var(--border-hot); border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+    padding: 6px 14px; margin-bottom: 1.25rem;
+  }
+  h1 {
+    font-family: var(--font-display); font-weight: 800;
+    font-size: clamp(2.2rem, 5vw, 3.4rem); line-height: 1.1;
+    letter-spacing: -0.02em; margin-bottom: 1rem;
+  }
+  h1 .grad {
+    background: linear-gradient(135deg, #7ec8ff, #3B9EFF 40%, #a78bfa);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lead { color: var(--text-dim); max-width: 560px; margin: 0 auto 2rem; font-size: 1.05rem; }
+  .center { text-align: center; }
+  .drop {
+    margin: 0 auto 1.5rem; max-width: 560px;
+    border: 1.5px dashed var(--border-hot); border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, var(--bg-card2), var(--bg-card));
+    padding: 2.5rem 1.5rem; cursor: pointer; transition: var(--transition);
+  }
+  .drop:hover, .drop.dragover { border-color: var(--accent); background: var(--accent-dim); }
+  .drop-icon {
+    width: 56px; height: 56px; margin: 0 auto 1rem; border-radius: 14px;
+    background: var(--bg); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 24px;
+  }
+  .drop h3 { font-size: 1.05rem; margin-bottom: 0.35rem; }
+  .drop p { color: var(--text-muted); font-size: 13px; }
+  .file-name { margin-top: 0.75rem; font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+    background: var(--accent); color: #fff; border: none; border-radius: 999px;
+    font-family: var(--font-body); font-weight: 600; font-size: 15px;
+    padding: 14px 28px; cursor: pointer; transition: var(--transition);
+    box-shadow: 0 8px 28px rgba(59,158,255,0.25);
+  }
+  .btn:hover { transform: translateY(-1px); filter: brightness(1.08); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-row { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+  .card-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem; margin-top: 2.5rem;
+  }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 1.25rem 1.35rem;
+    transition: var(--transition);
+  }
+  .card:hover { border-color: var(--border-hot); transform: translateY(-2px); }
+  .card h4 { font-size: 0.95rem; margin-bottom: 0.4rem; display: flex; gap: 8px; align-items: center; }
+  .card p { color: var(--text-dim); font-size: 13px; }
+  .stage-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem; margin-top: 1.5rem;
+  }
+  .stage {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .stage img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #000; display: block; }
+  .stage figcaption { padding: 0.65rem 0.8rem; font-size: 12px; color: var(--text-dim); }
+  .stage strong { display: block; color: var(--text); font-size: 13px; margin-bottom: 2px; }
+  .verdict {
+    margin-top: 1.75rem; padding: 1.5rem; border-radius: var(--radius-lg);
+    border: 1px solid var(--border); background: var(--bg-card);
+  }
+  .verdict.forged { border-color: rgba(255,75,75,0.4); background: linear-gradient(135deg, var(--red-dim), var(--bg-card)); }
+  .verdict.authentic { border-color: rgba(34,201,124,0.4); background: linear-gradient(135deg, var(--green-dim), var(--bg-card)); }
+  .verdict h2 { font-family: var(--font-display); font-size: 1.6rem; margin-bottom: 0.5rem; }
+  .metrics {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.75rem; margin-top: 1rem;
+  }
+  .metric {
+    background: rgba(0,0,0,0.25); border-radius: 10px; padding: 0.75rem;
+    text-align: center;
+  }
+  .metric .v { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 600; color: var(--accent); }
+  .metric .l { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  table {
+    width: 100%; border-collapse: collapse; margin-top: 1rem;
+    font-size: 13px; font-family: var(--font-mono);
+  }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-dim); font-weight: 500; font-family: var(--font-body); }
+  tr:hover td { background: rgba(59,158,255,0.04); }
+  .section-title {
+    font-family: var(--font-display); font-size: 1.8rem; margin-bottom: 0.5rem;
+  }
+  .muted { color: var(--text-dim); margin-bottom: 1.25rem; }
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+  .error {
+    margin: 1rem auto; max-width: 560px; padding: 0.9rem 1rem;
+    background: var(--red-dim); border: 1px solid rgba(255,75,75,0.35);
+    border-radius: var(--radius); color: #ffb4b4; font-size: 14px;
+  }
+  footer {
+    border-top: 1px solid var(--border); padding: 1.5rem;
+    text-align: center; color: var(--text-muted); font-size: 12px;
+    position: relative; z-index: 1;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 720px) {
+    nav { padding: 0 0.75rem; gap: 8px; }
+    .nav-links { display: none; }
+    .nav-status { display: none; }
+  }
+</style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="#" onclick="showPage('detect'); return false;">
+    <span class="nav-logo-mark">V</span>
+    OM²AHL-BiG
+    <span class="nav-badge">Paper 2</span>
+  </a>
+  <div class="nav-links">
+    <button class="nav-link active" data-page="detect" onclick="showPage('detect')">Video Detection</button>
+    <button class="nav-link" data-page="results" onclick="showPage('results')">Results</button>
+    <button class="nav-link" data-page="about" onclick="showPage('about')">About</button>
+  </div>
+  <div class="nav-status"><span class="dot"></span> Model: OM²AHL-BiG pipeline</div>
+</nav>
+
+<main>
+  <!-- DETECT -->
+  <section id="page-detect" class="page active">
+    <div class="center">
+      <div class="pill">⚡ INTRA-FRAME VIDEO FORENSICS</div>
+      <h1>Detect Video<br><span class="grad">Forgery with AI</span></h1>
+      <p class="lead">
+        Upload a video or frame. The demo runs the Paper&nbsp;2 pipeline stages —
+        face ROI, GradCAM-style attention, statistical maps, keypoint &amp; shape descriptors —
+        inspired by the OM²AHL-BiG research system.
+      </p>
+      <div class="drop" id="drop" onclick="fileInput.click()">
+        <div class="drop-icon">🎬</div>
+        <h3>Drop video / image here or click to browse</h3>
+        <p>Supports MP4, AVI, MOV, JPG, PNG · Max 40 MB</p>
+        <div class="file-name" id="fileName"></div>
+        <input type="file" id="fileInput" class="hidden" accept=".mp4,.avi,.mov,.mkv,.webm,.jpg,.jpeg,.png,.bmp,.webp" />
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="analyzeBtn" disabled onclick="runAnalyze()">
+          <span id="btnLabel">🔍 Analyze for Forgery</span>
+          <span id="btnSpin" class="spinner hidden"></span>
+        </button>
+      </div>
+      <div id="err" class="error hidden"></div>
+    </div>
+
+    <div id="out" class="hidden" style="margin-top:2.5rem">
+      <div id="verdictBox" class="verdict"></div>
+      <h3 class="section-title" style="margin-top:2rem;font-size:1.35rem">Pipeline stages</h3>
+      <p class="muted">Same conceptual flow as <code>GUI.py</code> desktop app stages.</p>
+      <div class="stage-grid" id="stageGrid"></div>
+      <p class="muted" id="note" style="margin-top:1.25rem;font-size:12px"></p>
+    </div>
+
+    <div class="card-grid">
+      <div class="card"><h4>🧠 OM²AHL-BiG</h4><p>Multilevel mixed attention + Bi-LSTM + hybrid incremental learning + CoSH + GBM classifier.</p></div>
+      <div class="card"><h4>🎞️ Intra-frame focus</h4><p>Targets FaceSwap-style manipulations inside individual frames (FaceForensics++ c23).</p></div>
+      <div class="card"><h4>📊 Research metrics</h4><p>Published TP-90% accuracy ~{{ paper.accuracy }}% · see Results tab for smoke re-run tables.</p></div>
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="page-results" class="page">
+    <div class="pill">📈 EVALUATION</div>
+    <h2 class="section-title">Results &amp; metrics</h2>
+    <p class="muted">Published paper figures vs smoke-scale re-evaluation on <code>Features/Features.pkl</code> (199 videos).</p>
+
+    <div class="card" style="margin-bottom:1.25rem">
+      <h4>Paper snapshot · OM²AHL-BiG @ Training 90%</h4>
+      <div class="metrics">
+        <div class="metric"><div class="v">{{ '%.2f'|format(paper.accuracy) }}%</div><div class="l">Accuracy</div></div>
+        <div class="metric"><div class="v">{{ '%.2f'|format(paper.precision) }}%</div><div class="l">Precision</div></div>
+        <div class="metric"><div class="v">{{ '%.2f'|format(paper.sensitivity) }}%</div><div class="l">Sensitivity</div></div>
+        <div class="metric"><div class="v">{{ '%.2f'|format(paper.specificity) }}%</div><div class="l">Specificity</div></div>
+        <div class="metric"><div class="v">{{ '%.2f'|format(paper.f1) }}%</div><div class="l">F1 Score</div></div>
+      </div>
+      <p class="muted" style="margin:0.75rem 0 0;font-size:12px">Source: <code>Analysis/TP/COM_A.npy</code> · doc Tables 4–6</p>
+    </div>
+
+    <div class="card">
+      <h4>Smoke re-run · BiLSTMGBM · 3 epochs · CoSH skipped</h4>
+      <p class="muted" style="margin-bottom:0.5rem;font-size:12px">Source: {{ smoke_src }}</p>
+      <table>
+        <thead>
+          <tr><th>Train %</th><th>Accuracy</th><th>Sens</th><th>Spec</th><th>Prec</th><th>F1</th></tr>
+        </thead>
+        <tbody>
+          {% for r in smoke %}
+          <tr>
+            <td>{{ r.tp }}%</td>
+            <td>{{ '%.2f'|format(r.acc) }}</td>
+            <td>{{ '%.2f'|format(r.sen) }}</td>
+            <td>{{ '%.2f'|format(r.spe) }}</td>
+            <td>{{ '%.2f'|format(r.pre) }}</td>
+            <td>{{ '%.2f'|format(r.f1) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="muted" style="margin-top:0.85rem;font-size:12px">
+        Smoke run validates end-to-end trainability. Paper uses 500 epochs + CoSH optimization (~48 h).
+        Full offline eval: <code>driver.py evaluate --epochs 3 --skip-opt</code>
+      </p>
+    </div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="page-about" class="page">
+    <div class="pill">ℹ️ RESEARCH SYSTEM</div>
+    <h2 class="section-title">About OM²AHL-BiG</h2>
+    <p class="muted" style="max-width:720px">
+      Optimized Multi-level Mixed Attention enabled Hybrid Learning based Bidirectional Gradient
+      model for intra-frame video forgery detection (Paper 2 · postdoc).
+    </p>
+    <div class="card-grid">
+      <div class="card"><h4>1 · Preprocessing</h4><p><code>GetPreprocessing.py</code> — adaptive key frames + Viola–Jones ROI (Haar cascade).</p></div>
+      <div class="card"><h4>2 · Features</h4><p><code>GetFeatures.py</code> — GradCAM, ResNet-101 statistics, VGG-16+SIFT, shape-ResNet.</p></div>
+      <div class="card"><h4>3 · Model</h4><p><code>Model.py · BiLSTMGBM</code> — BiLSTM + multilevel/mixed attention + incremental learning + GBM.</p></div>
+      <div class="card"><h4>4 · Optimization</h4><p><code>Optimization.py</code> + vendored <code>mealpy/Proposed.py</code> (CoSH hybrid).</p></div>
+      <div class="card"><h4>5 · Analysis</h4><p><code>Analysis.py</code> — TP 40–90% and K-fold 6–10 comparative / performance loops.</p></div>
+      <div class="card"><h4>6 · GUI / Web</h4><p><code>GUI.py</code> desktop · <code>webapp/app.py</code> browser demo for Render.</p></div>
+    </div>
+    <div class="card" style="margin-top:1.25rem">
+      <h4>Executable entry points</h4>
+      <p style="color:var(--text-dim);font-size:13px;margin-top:0.5rem">
+        <code>Main.py</code> — full train or plot-only ·
+        <code>GUI.py</code> — interactive stages ·
+        <code>driver.py</code> — check / plots / gui / evaluate ·
+        <code>webapp/app.py</code> — this site ·
+        <code>gunicorn app:app</code> — production (Render).
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  OM²AHL-BiG · Video Forensic Paper 2 for postdoc ·
+  Pipeline mirrors <code>GUI.py</code> · Offline training via <code>Features/Features.pkl</code> ·
+  UI inspired by ForensiQ / AT SCHOOL.IN project hub design language
+</footer>
+
+<script>
+  const fileInput = document.getElementById('fileInput');
+  const drop = document.getElementById('drop');
+  const fileName = document.getElementById('fileName');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const err = document.getElementById('err');
+  const out = document.getElementById('out');
+  let selectedFile = null;
+
+  function showPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + name).classList.add('active');
+    document.querySelectorAll('.nav-link').forEach(b => {
+      b.classList.toggle('active', b.dataset.page === name);
+    });
+  }
+
+  ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.add('dragover');
+  }));
+  ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.remove('dragover');
+  }));
+  drop.addEventListener('drop', e => {
+    if (e.dataTransfer.files.length) pick(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) pick(fileInput.files[0]);
+  });
+
+  function pick(file) {
+    selectedFile = file;
+    fileName.textContent = file.name + ' · ' + (file.size/1e6).toFixed(2) + ' MB';
+    analyzeBtn.disabled = false;
+    err.classList.add('hidden');
+  }
+
+  async function runAnalyze() {
+    if (!selectedFile) return;
+    err.classList.add('hidden');
+    out.classList.add('hidden');
+    analyzeBtn.disabled = true;
+    document.getElementById('btnLabel').textContent = 'Analyzing…';
+    document.getElementById('btnSpin').classList.remove('hidden');
+
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    try {
+      const res = await fetch('/api/analyze', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Analysis failed');
+      renderOut(data);
+    } catch (e) {
+      err.textContent = e.message;
+      err.classList.remove('hidden');
+    } finally {
+      analyzeBtn.disabled = false;
+      document.getElementById('btnLabel').textContent = '🔍 Analyze for Forgery';
+      document.getElementById('btnSpin').classList.add('hidden');
+    }
+  }
+
+  function renderOut(data) {
+    const v = data.verdict;
+    const forged = (v.label || '').toUpperCase().includes('FORGED');
+    const box = document.getElementById('verdictBox');
+    box.className = 'verdict ' + (forged ? 'forged' : 'authentic');
+    box.innerHTML = `
+      <h2>${forged ? '⚠️' : '✅'} ${v.label}</h2>
+      <p style="color:var(--text-dim);font-size:14px">
+        Confidence ${v.confidence}% · forged ${v.forged_probability}% · authentic ${v.authentic_probability}%
+        · ${data.elapsed_sec}s · ${data.source}
+      </p>
+      <div class="metrics">
+        <div class="metric"><div class="v">${v.signals.laplacian_variance}</div><div class="l">Lap. variance</div></div>
+        <div class="metric"><div class="v">${v.signals.intensity_entropy}</div><div class="l">Entropy</div></div>
+        <div class="metric"><div class="v">${v.signals.orb_keypoints}</div><div class="l">ORB keypoints</div></div>
+        <div class="metric"><div class="v">${v.signals.contour_count}</div><div class="l">Contours</div></div>
+      </div>`;
+
+    const grid = document.getElementById('stageGrid');
+    grid.innerHTML = '';
+    (data.pipeline || []).forEach(step => {
+      const src = data.stages[step.id];
+      if (!src) return;
+      const fig = document.createElement('figure');
+      fig.className = 'stage';
+      fig.innerHTML = `<img src="${src}" alt="${step.title}" /><figcaption><strong>${step.title}</strong>${step.desc}</figcaption>`;
+      grid.appendChild(fig);
+    });
+    document.getElementById('note').textContent = data.note || '';
+    out.classList.remove('hidden');
+    out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+</script>
+</body>
+</html>

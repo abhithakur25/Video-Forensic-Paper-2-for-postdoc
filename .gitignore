@@ -1,0 +1,20 @@
+﻿__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.venv/
+venv/
+.env
+.idea/
+.vscode/
+.keras/
+Thumbs.db
+Desktop.ini
+*.docx.bak-*
+Results/Results.rar
+webapp/static/uploads/*
+!webapp/static/uploads/.gitkeep
+
+# bulk sample frames (~230MB) — optional GUI make-video source
+Results/ImageResults/
