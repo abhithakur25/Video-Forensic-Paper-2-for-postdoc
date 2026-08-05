@@ -2,9 +2,11 @@
 
 **Title:** Optimized Mixed Attention-based Bidirectional Gradient Model for Intra-frame Video Forgery Detection (**OM²AHL-BiG**)
 
-**Repository:** private postdoc codebase for Paper 2 (`CODE_05-08-2025(Paper2)`).
+**Repository:** private postdoc codebase for Paper 2 (`CODE_05-08-2025_Paper2`).
 
 This repository contains the full Python implementation, pre-extracted FaceForensics++ features, analysis arrays, result figures, a customtkinter GUI, and an agent/CLI **driver** that can check the environment, regenerate plots, walk the GUI, and re-run training/evaluation without interactive popups.
+
+**New:** multi-model comparison trains **DCNN**, **EfficientNetV2B0** (latest backbone), **MobileNetV2**, and proposed **OM²AHL-BiG** on the same Paper 2 feature tensors — see [§7b Multi-model performance](#7b-multi-model-performance--comparison).
 
 ---
 
@@ -33,6 +35,8 @@ Run details and measured smoke-evaluation numbers: **`RUN_REPORT.md`**.
 | `SubFunctions/GetFeatures.py` | GradCAM / ResNet-stat / VGG-SIFT / shape-ResNet feature builders (loads ResNet101 + VGG16 at import) |
 | `SubFunctions/GradCAM.py` | Grad-CAM helper used by GUI and features |
 | `SubFunctions/Model.py` | **`Network.BiLSTMGBM`** — proposed OM²AHL-BiG model (~1.1 M params) |
+| `SubFunctions/MultiModel.py` | Multi-model train/predict: DCNN, EfficientNetV2B0, MobileNetV2, OM2AHL-BiG |
+| `SubFunctions/feature_adapters.py` | Reshape `(N,15,32,32,10)` features for each classifier input layout |
 | `SubFunctions/Attention.py` | Mutual cross-attention (torch), sparse self-attention, channel + zero attention (Keras) |
 | `SubFunctions/IncrementalLearning.py` | 5-chunk cumulative incremental training sets |
 | `SubFunctions/Optimization.py` | CoSH / mealpy `HYBRID` weight optimization after BiLSTM training |
@@ -214,6 +218,89 @@ Source: `Analysis/TP/COM_A.npy` / doc Tables 4–6 (OM²AHL-BiG).
 | K-fold = 10 (best) | ~97.3–97.7% |
 
 Smoke-scale re-runs (3 epochs, no CoSH) are intentionally lower and are documented in **`RUN_REPORT.md`** / `driver_out/evaluation_tp_ep3.txt`. They validate that the pipeline **executes end-to-end**, not that paper numbers are reproduced.
+
+---
+
+## 7b. Multi-model performance & comparison
+
+### Why this was added
+
+The original Paper 2 plots mixed the **proposed** OM²AHL-BiG metrics (`Analysis/*.npy`) with **static CSV baselines** from Paper 1 (`ResultsP1/`). That did not retrain comparison networks on the Paper 2 feature set.
+
+This repo now includes a **real multi-model evaluation**: every listed model is **fit and scored** on the same `Features/Features.pkl` tensors and the same `train_test_split` indices.
+
+### Models
+
+| Model | Role | Input adapter |
+|---|---|---|
+| **EfficientNetV2B0** | **Latest** Keras Applications backbone (V2 family; newer than paper-era EfficientNetB0) | Project features → 64×64 RGB-like maps |
+| **MobileNetV2** | Modern lightweight CNN baseline | Same RGB projection |
+| **DCNN** | Small Conv2D stack | Time-mean spatial volume `(32,32,10)` |
+| **OM2AHL-BiG** | Proposed BiLSTM + multilevel attention + GBM | Sequence reshape `(480, 320)` |
+
+**Latest model choice:** `tensorflow.keras.applications.EfficientNetV2B0` under TF/Keras **2.10.0** (project pin). V2 is the current EfficientNet family available without upgrading TensorFlow. ImageNet weights are **not** required (`weights=None`); the head trains from the projected Paper 2 features so runs work offline.
+
+### How to run
+
+```powershell
+$E = "C:\Users\USER\anaconda3\envs\VideoForgeryCPU"
+$env:PATH = "$E\Library\bin;$E;$E\Scripts;" + $env:PATH
+$env:KMP_DUPLICATE_LIB_OK = "TRUE"
+cd <this-repo>
+& "$E\python.exe" -u ".claude\skills\run-video-forgery-paper2\driver.py" evaluate-multi `
+  --epochs 2 --train-pcts 0.8,0.9 `
+  --models "DCNN,EfficientNetV2B0,MobileNetV2,OM2AHL-BiG"
+```
+
+Outputs:
+
+| Artifact | Content |
+|---|---|
+| `driver_out/evaluation_multi_ep2.txt` | Side-by-side ACC / SEN / SPE / PRE / F1 tables |
+| `driver_out/evaluation_multi_ep2.csv` | Machine-readable rows (model × train %) |
+| `Analysis1/TP/MULTI_*.npy` | Per-model metric arrays |
+
+Smoke tests (no pytest required): `python tests/run_multi_model_smokes.py`
+
+### Measured results (smoke protocol)
+
+**Protocol:** 199 videos · class balance 99 authentic / 100 forged · **2 epochs** · training percentages **80% and 90%** · CoSH optimization **skipped** for OM2AHL-BiG · wall time ~**17.5 min** (CPU).
+
+#### Accuracy
+
+| Model | ACC @ 80% train | ACC @ 90% train |
+|---|---:|---:|
+| DCNN | 0.8750 | 0.9500 |
+| **EfficientNetV2B0** (latest) | **0.9000** | **1.0000** |
+| MobileNetV2 | 0.8750 | 0.9500 |
+| OM2AHL-BiG (proposed) | 0.8500 | 0.9500 |
+
+#### Full metrics @ 80% training
+
+| Model | ACC | SEN | SPE | PRE | F1 |
+|---|---:|---:|---:|---:|---:|
+| DCNN | 0.8750 | 0.8500 | 0.9000 | 0.8947 | 0.8718 |
+| EfficientNetV2B0 | 0.9000 | 0.8500 | 0.9500 | 0.9444 | 0.8947 |
+| MobileNetV2 | 0.8750 | 0.8500 | 0.9000 | 0.8947 | 0.8718 |
+| OM2AHL-BiG | 0.8500 | 0.8000 | 0.9000 | 0.8889 | 0.8421 |
+
+#### Full metrics @ 90% training
+
+| Model | ACC | SEN | SPE | PRE | F1 |
+|---|---:|---:|---:|---:|---:|
+| DCNN | 0.9500 | 1.0000 | 0.9000 | 0.9091 | 0.9524 |
+| EfficientNetV2B0 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| MobileNetV2 | 0.9500 | 0.9000 | 1.0000 | 1.0000 | 0.9474 |
+| OM2AHL-BiG | 0.9500 | 1.0000 | 0.9000 | 0.9091 | 0.9524 |
+
+### How to read the comparison
+
+1. **At smoke scale (2 epochs), EfficientNetV2B0 is the strongest** among the four on both 80% and 90% training splits (best ACC / F1).
+2. **OM2AHL-BiG matches DCNN/MobileNetV2 at 90% train (ACC 0.95)** and is slightly behind the V2 backbone. With only 2 epochs and no CoSH, the proposed hybrid is **undertrained** relative to the paper’s 500-epoch + CoSH configuration (published OM²AHL-BiG ~98.6% ACC @ 90%).
+3. **Test sets are small** at 90% train (~20 videos), so 1.0000 accuracy for EfficientNetV2B0 is a valid run outcome but **not** a claim of perfect real-world detection.
+4. All four models completed **2/2 splits OK** — failures are logged explicitly if they occur; none were silent.
+
+For longer training that better reflects the paper, raise `--epochs` (e.g. 50–500) and optionally enable CoSH for OM2AHL-BiG with `--with-opt` (much slower).
 
 ---
 

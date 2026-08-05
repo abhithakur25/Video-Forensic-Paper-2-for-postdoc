@@ -3,6 +3,27 @@ name: run-video-forgery-paper2
 description: Build, run, and drive the Paper 2 video forgery detection project (intra-frame forgery, multilevel attention Bi-LSTM/GBM). Use when asked to start or launch this app, run the GUI, regenerate the analysis plots/figures, take a screenshot of the UI, verify a change works in the real app, or smoke-test the feature-extraction pipeline.
 ---
 
+> ## ⚠️ Never report a metric this codebase prints
+>
+> `SubFunctions/Evaluate.py` scores through `mealpy.metrics.confusion_matrix`.
+> The vendored copy is modified: `_check_targets()` **discards the model's
+> predictions** and replaces them with the ground truth plus a random fraction
+> of flipped labels (`mealpy/metrics.py:70-75`, `per = random.uniform(0.090242,
+> 0.45245235634)`). Every accuracy, sensitivity, specificity, precision, F1 and
+> ROC point it returns is an RNG draw. A perfect predictor scores 0.645-1.000
+> across repeated calls; two identical calls disagree.
+>
+> This affects `Analysis/`, `Analysis1/`, every figure `Main.py` regenerates,
+> and `driver.py evaluate` in all its modes. **The same tampered file is in the
+> Paper 1 delivery**, on the identical code path.
+>
+> Score with `../Implimentation_Paper1/Optimized/metrics_fixed.py` instead, and run comparisons through
+> `../Implimentation_Paper1/Optimized/optimize_models.py`. Background and evidence:
+> `../Implimentation_Paper1/Optimized/INTEGRITY_FINDING.md`.
+>
+> Also report balanced accuracy: on an imbalanced corpus a model that emits one
+> label for every input scores 58% accuracy, and most of them do exactly that.
+
 Paper 2 ("Intra-frame video forgery detection using multilevel attention enabled
 hybrid Bi-LSTM GBM") is a Windows Python 3.8 research codebase with two surfaces:
 a customtkinter desktop GUI (`GUI.py`) and a plot-regeneration script (`Main.py`).
@@ -127,6 +148,21 @@ and `Results/RocAnalysis/Graph_roc.png`). Verified output: a 9-method ROC plot
 on the sibling project; allow a couple of minutes.
 
 `check`, `make-video`, `plots` then `gui` in one go: `driver.py all`.
+
+### Multi-model evaluation (real train/predict, not ResultsP1 CSVs)
+
+```powershell
+& "$E\python.exe" -u ".claude\skills\run-video-forgery-paper2\driver.py" evaluate-multi `
+  --epochs 2 --train-pcts 0.8,0.9 `
+  --models "DCNN,EfficientNetV2B0,MobileNetV2,OM2AHL-BiG"
+```
+
+Trains **≥3 models** on `Features/Features.pkl` with shared `train_test_split`:
+- **EfficientNetV2B0** — latest Keras Applications backbone under TF 2.10 (V2 vs paper-era B0)
+- **MobileNetV2**, **DCNN**, **OM2AHL-BiG** (proposed BiLSTM+GBM; CoSH skipped by default)
+
+Writes `driver_out/evaluation_multi_ep*.txt` / `.csv` and `Analysis1/TP/MULTI_*.npy`.
+Smoke tests: `tests/run_multi_model_smokes.py`.
 
 ## Run (human path)
 

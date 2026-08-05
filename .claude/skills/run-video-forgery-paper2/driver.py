@@ -518,6 +518,154 @@ def cmd_evaluate(args):
     return 0
 
 
+# --------------------------------------------------------------------------
+# evaluate-multi  — real train/predict for ≥3 models on Paper 2 features
+# --------------------------------------------------------------------------
+def cmd_evaluate_multi(args):
+    """Train and score multiple classifiers on Features.pkl (same splits).
+
+    Comparison models actually fit on Paper 2 tensors — they do NOT load
+    ResultsP1 CSVs. Includes EfficientNetV2B0 as the latest backbone variant
+    available under TF 2.10 keras.applications.
+    """
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+    # torch before scipy for OM2AHL-BiG path
+    try:
+        import torch
+        log(f"torch {torch.__version__} (for OM2AHL-BiG attention path)")
+    except Exception as e:
+        log(f"torch UNAVAILABLE ({type(e).__name__}) — OM2AHL-BiG may fail")
+
+    import numpy as np
+    import tensorflow as tf
+    from tensorflow import keras
+    from SubFunctions.GetData import ReadDataset
+    from SubFunctions.Analysis import train_test_split
+    from SubFunctions.Evaluate import Evaluation_Metrics
+    from SubFunctions.MultiModel import (
+        MODEL_REGISTRY, LATEST_BACKBONE, LATEST_BACKBONE_REASON, run_model,
+    )
+
+    epochs = int(args.epochs)
+    pcts = [float(x) for x in args.train_pcts.split(",")]
+    wanted = [m.strip() for m in args.models.split(",") if m.strip()]
+    for m in wanted:
+        if m not in MODEL_REGISTRY:
+            log(f"unknown model {m!r}; known={list(MODEL_REGISTRY)}")
+            return 1
+
+    t0 = time.time()
+    data = ReadDataset(exec=False).read_data()
+    lab = np.asarray(data["labels"])
+    feats = np.asarray(data["features"])
+    u, c = np.unique(lab, return_counts=True)
+    log(f"features {feats.shape}  labels {dict(zip(u.tolist(), c.tolist()))}")
+    log(f"LATEST_BACKBONE={LATEST_BACKBONE}  reason={LATEST_BACKBONE_REASON}")
+    log(f"tf={tf.__version__} keras={keras.__version__} epochs={epochs} "
+        f"models={wanted} train_pcts={pcts}")
+
+    # grid[model][split_i] = [ACC,SEN,SPE,PRE,F1] or nan
+    grid = {m: [] for m in wanted}
+    t_all = time.time()
+
+    for si, tp in enumerate(pcts):
+        d = train_test_split(data, train_size=tp)
+        x_tr, x_te, y_tr, y_te = d[0], d[1], np.asarray(d[2]), np.asarray(d[3])
+        log(f"===== split {si+1}/{len(pcts)} TP={tp} "
+            f"train={len(y_tr)} test={len(y_te)} =====")
+        for name in wanted:
+            t = time.time()
+            try:
+                kwargs = {}
+                if name == "OM2AHL-BiG":
+                    kwargs["skip_opt"] = not getattr(args, "with_opt", False)
+                pred = run_model(name, x_tr, y_tr, x_te, y_te,
+                                 epochs=epochs, **kwargs)
+                pred = np.asarray(pred).reshape(-1)
+                if len(pred) != len(y_te):
+                    raise RuntimeError(
+                        f"pred length {len(pred)} != test labels {len(y_te)}")
+                m = [float(x) for x in Evaluation_Metrics(y_te, pred)]
+                grid[name].append(m)
+                log(f"  {name:<16} ACC={m[0]:.4f} SEN={m[1]:.4f} SPE={m[2]:.4f} "
+                    f"PRE={m[3]:.4f} F1={m[4]:.4f}  ({time.time()-t:.0f}s)")
+            except Exception as e:
+                grid[name].append([float("nan")] * 5)
+                log(f"  {name:<16} FAILED {type(e).__name__}: {e}")
+                traceback.print_exc()
+
+    # save npy: one file per model, rows=splits
+    outdir = PROJECT / "Analysis1" / "TP"
+    outdir.mkdir(parents=True, exist_ok=True)
+    letter = {m: chr(ord("A") + i) for i, m in enumerate(wanted)}
+    for name in wanted:
+        arr = np.asarray(grid[name], dtype=float)
+        np.save(outdir / f"MULTI_{letter[name]}_{name.replace('/', '_')}.npy", arr)
+
+    # side-by-side text table
+    metric_names = ["Accuracy", "Sensitivity", "Specificity", "Precision", "F1"]
+    lines = [
+        "Paper 2 multi-model evaluation (real train/predict on Features.pkl)",
+        f"features : {feats.shape}",
+        f"samples  : {len(lab)}  balance {dict(zip(u.tolist(), c.tolist()))}",
+        f"epochs   : {epochs}",
+        f"train_pcts: {pcts}",
+        f"models   : {wanted}",
+        f"latest   : {LATEST_BACKBONE} — {LATEST_BACKBONE_REASON}",
+        f"tf/keras : {tf.__version__} / {keras.__version__}",
+        f"elapsed  : {time.time()-t_all:.0f}s",
+        f"loaded_in: {t0 and time.time()-t0:.0f}s total wall incl. load",
+        "",
+    ]
+    for mi, metric in enumerate(metric_names):
+        hdr = f"{metric:<14}" + "".join(f"{int(p*100):>10}%" for p in pcts)
+        lines += [hdr, "-" * len(hdr)]
+        for name in wanted:
+            cells = []
+            for i in range(len(pcts)):
+                v = grid[name][i][mi]
+                cells.append(f"{v:>11.4f}" if v == v else f"{'FAILED':>11}")
+            lines.append(f"{name:<14}" + "".join(cells))
+        lines.append("")
+
+    # failures summary
+    lines.append("Per-model status:")
+    for name in wanted:
+        fails = sum(1 for row in grid[name] if any(v != v for v in row))
+        ok = len(pcts) - fails
+        lines.append(f"  {name}: {ok}/{len(pcts)} splits OK"
+                     + (f", {fails} FAILED" if fails else ""))
+
+    text = "\n".join(lines) + "\n"
+    print("\n" + text)
+    tag = f"evaluation_multi_ep{epochs}.txt"
+    dst = OUT / tag
+    dst.write_text(text, encoding="utf-8")
+    # also CSV for easy comparison
+    import csv
+    csv_path = OUT / f"evaluation_multi_ep{epochs}.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["model", "train_pct", "ACC", "SEN", "SPE", "PRE", "F1", "status"])
+        for name in wanted:
+            for i, tp in enumerate(pcts):
+                row = grid[name][i]
+                ok = all(v == v for v in row)
+                w.writerow([name, int(tp * 100),
+                            *[f"{v:.6f}" if v == v else "" for v in row],
+                            "OK" if ok else "FAILED"])
+    log(f"wrote {dst.relative_to(PROJECT)} and {csv_path.relative_to(PROJECT)}")
+    # require ≥1 numeric metric for ≥3 models
+    ok_models = [m for m in wanted
+                 if any(all(v == v for v in row) for row in grid[m])]
+    if len(ok_models) < 3:
+        log(f"WARNING: only {len(ok_models)} models produced numeric metrics "
+            f"({ok_models}); need ≥3")
+        return 1
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -544,6 +692,19 @@ def main():
                     help="skip CoSH mealpy weight optimization (default on)")
     ev.add_argument("--with-opt", action="store_true",
                     help="enable CoSH optimization (very slow)")
+    em = sub.add_parser(
+        "evaluate-multi",
+        help="multi-model train+eval on Features.pkl (DCNN, EfficientNetV2B0, "
+             "MobileNetV2, OM2AHL-BiG)")
+    em.add_argument("--epochs", type=int, default=3,
+                    help="epochs per model (default 3; paper 500)")
+    em.add_argument("--train-pcts", default="0.8,0.9",
+                    help="comma training fractions (default 0.8,0.9 for speed)")
+    em.add_argument("--models",
+                    default="DCNN,EfficientNetV2B0,MobileNetV2,OM2AHL-BiG",
+                    help="comma model names from MultiModel.MODEL_REGISTRY")
+    em.add_argument("--with-opt", action="store_true",
+                    help="enable CoSH for OM2AHL-BiG only (slow)")
     a = sub.add_parser("all")
     a.add_argument("--video")
     a.add_argument("--stages")
@@ -561,7 +722,8 @@ def main():
         return cmd_gui(args)
     return {"check": cmd_check, "make-video": cmd_make_video,
             "plots": cmd_plots, "gui": cmd_gui,
-            "evaluate": cmd_evaluate}[args.cmd](args)
+            "evaluate": cmd_evaluate,
+            "evaluate-multi": cmd_evaluate_multi}[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -141,3 +141,27 @@ From `Analysis/TP/COM_A.npy` (used by the paper figures / Tables 4–6):
 
 Doc Table 6 (TP 90% / K-Fold 10) reports OM²AHL-BiG accuracy **98.62%** (TP)
 and **97.28%** (KF-10).
+
+---
+
+## Multi-model comparison (optimized evaluation coverage)
+
+Command:
+
+```powershell
+driver.py evaluate-multi --epochs 2 --train-pcts 0.8,0.9 --models DCNN,EfficientNetV2B0,MobileNetV2,OM2AHL-BiG
+```
+
+**Latest backbone:** `EfficientNetV2B0` (`tensorflow.keras.applications` under TF 2.10) — V2 successor to EfficientNetB0 paper baselines; `weights=None` (train from projected Paper-2 tensors; no ImageNet download).
+
+| Model | ACC@80% | ACC@90% |
+|---|---|---|
+| DCNN | 0.8750 | 0.9500 |
+| **EfficientNetV2B0** (latest) | **0.9000** | **1.0000** |
+| MobileNetV2 | 0.8750 | 0.9500 |
+| OM2AHL-BiG (proposed) | 0.8500 | 0.9500 |
+
+Outputs: `driver_out/evaluation_multi_ep2.txt`, `.csv`, `Analysis1/TP/MULTI_*.npy`.
+Code: `SubFunctions/MultiModel.py`, `feature_adapters.py`.
+Smoke tests: `tests/run_multi_model_smokes.py`.
+

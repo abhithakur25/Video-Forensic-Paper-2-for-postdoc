@@ -1,0 +1,51 @@
+Paper 2 multi-model evaluation (real train/predict on Features.pkl)
+features : (199, 15, 32, 32, 10)
+samples  : 199  balance {0: 99, 1: 100}
+epochs   : 2
+train_pcts: [0.8, 0.9]
+models   : ['DCNN', 'EfficientNetV2B0', 'MobileNetV2', 'OM2AHL-BiG']
+latest   : EfficientNetV2B0 — EfficientNetV2B0 is the V2 family successor to EfficientNetB0 used in historical paper baselines; available in keras.applications under TF 2.10 without upgrading the project's TensorFlow pin.
+tf/keras : 2.10.0 / 2.10.0
+elapsed  : 1049s
+loaded_in: 1049s total wall incl. load
+
+Accuracy              80%        90%
+------------------------------------
+DCNN               0.8750     0.9500
+EfficientNetV2B0     0.9000     1.0000
+MobileNetV2        0.8750     0.9500
+OM2AHL-BiG         0.8500     0.9500
+
+Sensitivity           80%        90%
+------------------------------------
+DCNN               0.8500     1.0000
+EfficientNetV2B0     0.8500     1.0000
+MobileNetV2        0.8500     0.9000
+OM2AHL-BiG         0.8000     1.0000
+
+Specificity           80%        90%
+------------------------------------
+DCNN               0.9000     0.9000
+EfficientNetV2B0     0.9500     1.0000
+MobileNetV2        0.9000     1.0000
+OM2AHL-BiG         0.9000     0.9000
+
+Precision             80%        90%
+------------------------------------
+DCNN               0.8947     0.9091
+EfficientNetV2B0     0.9444     1.0000
+MobileNetV2        0.8947     1.0000
+OM2AHL-BiG         0.8889     0.9091
+
+F1                    80%        90%
+------------------------------------
+DCNN               0.8718     0.9524
+EfficientNetV2B0     0.8947     1.0000
+MobileNetV2        0.8718     0.9474
+OM2AHL-BiG         0.8421     0.9524
+
+Per-model status:
+  DCNN: 2/2 splits OK
+  EfficientNetV2B0: 2/2 splits OK
+  MobileNetV2: 2/2 splits OK
+  OM2AHL-BiG: 2/2 splits OK
